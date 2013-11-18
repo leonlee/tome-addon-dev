@@ -179,18 +179,55 @@ function _M:publishAddon(add, release_name)
 	else
 		Dialog:simplePopup("Uploading addon", "Addon #LIGHT_RED#"..add.short_name.."#LAST# not upload: "..(reason or "unknown reason"))
 	end
+end
 
---[[
-	core.steam.publishFile(file, "user-generated-addons/test.png", add.long_name, "Desc", {"items", "test"}, function(title, needaccept, error)
-		if error then Dialog:simplePopup("Steam Workshop: "..title, "There was an error uploading the addon.")
-		elseif needaccept then
-			Dialog:yesnoLongPopup("Steam Workshop: "..title, "Addon succesfully uploaded to the Workshop.\nYou need to accept Steam Workshop Agreement in your Steam Client before the addon is visible to the community.", 500, function(ret) if ret then
-				util.browserOpenUrl(needaccept)
-			end end, "Go to Workshop", "Later")
-		else Dialog:simplePopup("Steam Workshop: "..title, "Addon succesfully uploaded to the Workshop.")
-		end
-	end)
-]]
+function _M:publishAddonSteam(add)
+	local file, fmd5 = self:zipAddon(add, true)
+
+	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="check_steam_pubid",
+		for_module = game.__mod_info.short_name,
+		short_name = add.short_name,
+		version = add.version,
+		md5 = fmd5,
+	})
+	local pubid = nil
+	local err = nil
+	local popup = Dialog:simpleWaiter("Connecting to server", "Addon: "..add.short_name)
+	profile:waitEvent("AddonAuthoring", function(e) if e.suborder == "check_steam_pubid" then pubid = e.pubid err = e.err end end, 10000)
+	popup:done()
+	if pubid == '' then pubid = nil end
+	print("[STEAM UPLOAD] Got addon steam pubid", pubid)
+
+	if err then
+		Dialog:simplePopup("Steam Workshop: "..add.long_name, "Update error: "..(err or "unknown"))
+		return
+	end
+
+	local popup = Dialog:simpleWaiter("Uploading addon to Steam Workshop", "Addon: "..add.short_name, nil, 10000)
+	core.display.forceRedraw()
+	if not pubid then
+		core.steam.publishFile(file:sub(2), "user-generated-addons/test.png", add.long_name, add.description, add.tags, function(pubid, needaccept, error)
+			popup:done()
+			if not error and pubid then
+				core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="steam_pubid", for_module = game.__mod_info.short_name, short_name = add.short_name, pubid = pubid})
+			end
+
+			if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon.")
+			elseif needaccept then
+				Dialog:yesnoLongPopup("Steam Workshop: "..add.long_name, "Addon succesfully uploaded to the Workshop.\nYou need to accept Steam Workshop Agreement in your Steam Client before the addon is visible to the community.", 500, function(ret) if ret then
+					util.browserOpenUrl(needaccept)
+				end end, "Go to Workshop", "Later")
+			else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon succesfully uploaded to the Workshop.")
+			end
+		end)
+	else
+		core.steam.publishFileUpdate(pubid, file:sub(2), function(error)
+			popup:done()
+			if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon.")
+			else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon update succesfully uploaded to the Workshop.")
+			end
+		end)
+	end
 end
 
 function _M:use(item)
@@ -228,6 +265,10 @@ function _M:use(item)
 		end)
 		game:registerDialog(d)
 	end end) end
+
+	if act == "publish_steam" then Dialog:listPopup("Choose an addon to publish to Steam Workshop (needs to have been published to te4.org first)", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
+		self:publishAddonSteam(item.add)
+	end end) end
 end
 
 function _M:generateList()
@@ -237,7 +278,8 @@ function _M:generateList()
 	list[#list+1] = {name="Generate Addon's archive", action="zip"}
 	if profile.auth then
 		list[#list+1] = {name="Register new Addon", action="create"}
-		list[#list+1] = {name="Publish Addon", action="publish"}
+		list[#list+1] = {name="Publish Addon to te4.org", action="publish"}
+		if core.steam then list[#list+1] = {name="Publish Addon to Steam Workshop", action="publish_steam"} end
 	end
 
 	local chars = {}
