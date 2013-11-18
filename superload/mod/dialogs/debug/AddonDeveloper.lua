@@ -57,7 +57,7 @@ function _M:listAddons(filter)
 	return list
 end
 
-function _M:zipAddon(add)
+function _M:zipAddon(add, silent)
 	local t = core.game.getTime()
 
 	local base = nil
@@ -107,11 +107,90 @@ function _M:zipAddon(add)
 
 	local fmd5 = Module:addonMD5(add, fs.getRealPath("/user-generated-addons/"..zipname))
 	core.key.setClipboard(fmd5)
-	Dialog:simpleLongPopup("Archive for "..add.long_name, ([[Addon archive created:
+	if not silent then
+		Dialog:simpleLongPopup("Archive for "..add.long_name, ([[Addon archive created:
 - Addon file: #LIGHT_GREEN#%s#LAST# in folder #{bold}#%s#{normal}#
 - Addon MD5: #LIGHT_BLUE#%s#LAST# (this was copied to your clipboard)
 %s
 ]]):format(zipname, fs.getRealPath("/user-generated-addons/"), fmd5, more), 780)
+	end
+
+	return "/user-generated-addons/"..zipname, fmd5
+end
+
+function _M:createAddon(add)
+	if not add.tags or type(add.tags) ~= "table" then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a tags table, i.e: tags={'foo', 'bar'}")
+	end
+	if not add.description then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a description field")
+	end
+
+	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="create",
+		metadata = {
+			for_module = game.__mod_info.short_name,
+			short_name = add.short_name,
+			title = add.long_name,
+			desc = add.description,
+			tags = add.tags,
+		}
+	})
+	local popup = Dialog:simpleWaiter("Registering new addon", "Addon: "..add.short_name)
+	local ok = false
+	local reason = nil
+	profile:waitEvent("AddonAuthoring", function(e) ok = e.ok reason = e.reason end, 10000)
+	popup:done()
+
+	if ok then
+		Dialog:simplePopup("Registering new addon", "Addon #LIGHT_GREEN#"..add.short_name.."#LAST# registered. You may now upload a version for it.")
+	else
+		Dialog:simplePopup("Registering new addon", "Addon #LIGHT_RED#"..add.short_name.."#LAST# not registered: "..(reason or "unknown reason"))
+	end
+end
+
+function _M:publishAddon(add, release_name)
+	local file, fmd5 = self:zipAddon(add, true)
+
+	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="version",
+		metadata = {
+			for_module = game.__mod_info.short_name,
+			short_name = add.short_name,
+			title = release_name,
+			md5 = fmd5,
+			version = add.version,
+		},
+		file = file,
+	})
+	local popup = Dialog:simpleWaiter("Uploading addon", "Addon: "..add.short_name, nil, nil, 1) popup:manual()
+	local ok = nil
+	local reason = nil
+	while ok == nil do
+		profile:waitEvent("AddonAuthoring", function(e)
+			if e.suborder == "version_upload_start" then core.wait.addMaxTicks(e.total)
+			elseif e.suborder == "version_upload_progress" and popup then popup:manualStep(e.sent)
+			elseif e.suborder == "version" then ok = e.ok reason = e.reason
+			end
+		end, 10000)
+	end
+	if popup then popup:done() end
+
+	if ok then
+		Dialog:simplePopup("Uploading addon", "Addon #LIGHT_GREEN#"..add.short_name.."#LAST# uploaded, players may now play with it!")
+	else
+		Dialog:simplePopup("Uploading addon", "Addon #LIGHT_RED#"..add.short_name.."#LAST# not upload: "..(reason or "unknown reason"))
+	end
+
+--[[
+	core.steam.publishFile(file, "user-generated-addons/test.png", add.long_name, "Desc", {"items", "test"}, function(title, needaccept, error)
+		if error then Dialog:simplePopup("Steam Workshop: "..title, "There was an error uploading the addon.")
+		elseif needaccept then
+			Dialog:yesnoLongPopup("Steam Workshop: "..title, "Addon succesfully uploaded to the Workshop.\nYou need to accept Steam Workshop Agreement in your Steam Client before the addon is visible to the community.", 500, function(ret) if ret then
+				util.browserOpenUrl(needaccept)
+			end end, "Go to Workshop", "Later")
+		else Dialog:simplePopup("Steam Workshop: "..title, "Addon succesfully uploaded to the Workshop.")
+		end
+	end)
+]]
 end
 
 function _M:use(item)
@@ -136,13 +215,30 @@ function _M:use(item)
 	if act == "zip" then Dialog:listPopup("Choose an addon to archive", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
 		self:zipAddon(item.add)
 	end end) end
+
+	if act == "create" then Dialog:listPopup("Choose an addon to register", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
+		self:createAddon(item.add)
+	end end) end
+
+	if act == "publish" then Dialog:listPopup("Choose an addon to publish", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
+		local d = require("engine.dialogs.GetText").new("Name for this addon's release", "Name", 5, 50, function(name)
+			if name then
+				self:publishAddon(item.add, name)
+			end
+		end)
+		game:registerDialog(d)
+	end end) end
 end
 
 function _M:generateList()
 	local list = {}
 
-	list[#list+1] = {name="Generate addon's MD5", action="md5"}
-	list[#list+1] = {name="Generate addon's archive", action="zip"}
+	list[#list+1] = {name="Generate Addon's MD5", action="md5"}
+	list[#list+1] = {name="Generate Addon's archive", action="zip"}
+	if profile.auth then
+		list[#list+1] = {name="Register new Addon", action="create"}
+		list[#list+1] = {name="Publish Addon", action="publish"}
+	end
 
 	local chars = {}
 	for i, v in ipairs(list) do
