@@ -28,5 +28,5 @@ description = [[Provides tools to develop and publish addons.]]
 --overload = true
 superload = true
 --hooks = true
---data = true
+data = true
 cheat_only = true

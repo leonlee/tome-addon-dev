@@ -181,6 +181,36 @@ function _M:publishAddon(add, release_name)
 	end
 end
 
+function _M:addonPreview(add)
+	if not core.display.FBOActive() then return "data-addon-dev/gfx/default_addon_preview.png" end
+	local fbo = core.display.newFBO(512, 512)
+	if not fbo then return "data-addon-dev/gfx/default_addon_preview.png" end
+	local back = core.display.loadImage("data-addon-dev/gfx/default_addon_preview.png"):glTexture()
+	local font = core.display.newFont("/data/font/DroidSerif-Bold.ttf", 34)
+	local text = font:draw(add.long_name, 500, colors.GOLD.r, colors.GOLD.g, colors.GOLD.b, false, false)
+	local Shader = require "engine.Shader"
+	local shader = Shader.new("textoutline", {outlineColor={0xd7/255, 0x74/255, 0xfe/255, 0.6}, intensity=0.5, outlineSize={2,2}}).shad
+
+	fbo:use(true)
+	back:toScreen(0, 0, 512, 512)
+	local y = 220
+	if shader then shader:use(true) end
+	for i = 1, #text do
+		local item = text[i]
+		if shader then shader:uniTextSize(item._tex_w, item._tex_h) end
+		item._tex:toScreenFull(256 - item.realw / 2, y, item.w, item.h, item._tex_w, item._tex_h)
+		y = y + item.h
+	end
+	if shader then shader:use(false) end
+	fbo:use(false)
+	local imagedata = fbo:png()
+	local png = ("user-generated-addons/%s-%s.png"):format(add.for_module, add.short_name)
+	local f = fs.open(png, "w")
+	f:write(imagedata)
+	f:close()
+	return png
+end
+
 function _M:publishAddonSteam(add)
 	local file, fmd5 = self:zipAddon(add, true)
 
@@ -206,7 +236,8 @@ function _M:publishAddonSteam(add)
 	local popup = Dialog:simpleWaiter("Uploading addon to Steam Workshop", "Addon: "..add.short_name, nil, 10000)
 	core.display.forceRedraw()
 	if not pubid then
-		core.steam.publishFile(file:sub(2), "user-generated-addons/test.png", add.long_name, add.description, add.tags, function(pubid, needaccept, error)
+		local preview = self:addonPreview(add)
+		core.steam.publishFile(file:sub(2), preview, add.long_name, add.description, add.tags, function(pubid, needaccept, error)
 			popup:done()
 			if not error and pubid then
 				core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="steam_pubid", for_module = game.__mod_info.short_name, short_name = add.short_name, pubid = pubid})
