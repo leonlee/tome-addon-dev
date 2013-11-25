@@ -121,9 +121,11 @@ end
 function _M:createAddon(add)
 	if not add.tags or type(add.tags) ~= "table" then
 		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a tags table, i.e: tags={'foo', 'bar'}")
+		return
 	end
 	if not add.description then
 		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a description field")
+		return
 	end
 
 	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="create",
@@ -149,6 +151,15 @@ function _M:createAddon(add)
 end
 
 function _M:publishAddon(add, release_name)
+	if not add.tags or type(add.tags) ~= "table" then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a tags table, i.e: tags={'foo', 'bar'}")
+		return
+	end
+	if not add.description then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a description field")
+		return
+	end
+
 	local file, fmd5 = self:zipAddon(add, true)
 
 	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="version",
@@ -212,6 +223,15 @@ function _M:addonPreview(add)
 end
 
 function _M:publishAddonSteam(add)
+	if not add.tags or type(add.tags) ~= "table" then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a tags table, i.e: tags={'foo', 'bar'}")
+		return
+	end
+	if not add.description then
+		Dialog:simplePopup("Registering new addon", "Addon init.lua must contain a description field")
+		return
+	end
+
 	local file, fmd5 = self:zipAddon(add, true)
 
 	core.profile.pushOrder(table.serialize{o="AddonAuthoring", suborder="check_steam_pubid",
@@ -236,7 +256,8 @@ function _M:publishAddonSteam(add)
 	local popup = Dialog:simpleWaiter("Uploading addon to Steam Workshop", "Addon: "..add.short_name, nil, 10000)
 	core.display.forceRedraw()
 	if not pubid then
-		local preview = self:addonPreview(add)
+		local preview = "user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png"
+		if not fs.exists(preview) then preview = self:addonPreview(add) end
 		core.steam.publishFile(file:sub(2), preview, add.long_name, add.description, add.tags, function(pubid, needaccept, error)
 			popup:done()
 			if not error and pubid then
@@ -252,10 +273,20 @@ function _M:publishAddonSteam(add)
 			end
 		end)
 	else
-		core.steam.publishFileUpdate(pubid, file:sub(2), function(error)
+		core.steam.publishFileUpdate(pubid, file:sub(2), false, function(error)
 			popup:done()
-			if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon.")
-			else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon update succesfully uploaded to the Workshop.")
+			if fs.exists("/user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png") then game:onTickEnd(function()
+				local popup = Dialog:simpleWaiter("Uploading addon preview to Steam Workshop", "Addon: "..add.short_name, nil, 10000)
+				core.steam.publishFileUpdate(pubid, "user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png", true, function(error)
+					popup:done()
+					if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon preview.")
+					else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon update & preview succesfully uploaded to the Workshop.")
+					end
+				end)
+			end) else
+				if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon.")
+				else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon update succesfully uploaded to the Workshop.")
+				end
 			end
 		end)
 	end
@@ -277,7 +308,7 @@ function _M:use(item)
 	if act == "md5" then Dialog:listPopup("Choose an addon for MD5", "", self:listAddons(), 400, 500, function(item) if item then
 		local fmd5 = Module:addonMD5(item.add)
 		core.key.setClipboard(fmd5)
-		Dialog:simplePopup("MD5 for "..item.name, "Addon MD5: #LIGHT_BLUE#"..fmd5.."#LAST# (this was copied to your clipboard)")
+		Dialog:simpleLongPopup("MD5 for "..item.name, "Addon MD5: #LIGHT_BLUE#"..fmd5.."#LAST# (this was copied to your clipboard).\nHowever you should'nt need that anymore, you can upload your addon directly from here.", 600)
 	end end) end
 
 	if act == "zip" then Dialog:listPopup("Choose an addon to archive", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
@@ -298,7 +329,15 @@ function _M:use(item)
 	end end) end
 
 	if act == "publish_steam" then Dialog:listPopup("Choose an addon to publish to Steam Workshop (needs to have been published to te4.org first)", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
-		self:publishAddonSteam(item.add)
+		if not fs.exists("/user-generated-addons/"..item.add.for_module.."-"..item.add.short_name.."-custom.png") then
+			Dialog:yesnoLongPopup("Addon preview", ([[Addons on Steam Workshop need a "preview" image for the listing.
+The game has generated a default one, however it is best if you make a custom one and place it in the folder #LIGHT_GREEN#%s#LAST# named #LIGHT_BLUE#%s#LAST#
+You can still upload now and place it later.]]):format(fs.getRealPath("/user-generated-addons"), item.add.for_module.."-"..item.add.short_name.."-custom.png"), 600, function(ret)
+				self:publishAddonSteam(item.add)
+			end, "Upload now", "Wait")
+		else
+			self:publishAddonSteam(item.add)
+		end
 	end end) end
 end
 
@@ -306,11 +345,12 @@ function _M:generateList()
 	local list = {}
 
 	list[#list+1] = {name="Generate Addon's MD5", action="md5"}
-	list[#list+1] = {name="Generate Addon's archive", action="zip"}
+--	list[#list+1] = {name="Generate Addon's archive", action="zip"}
 	if profile.auth then
 		list[#list+1] = {name="Register new Addon", action="create"}
 		list[#list+1] = {name="Publish Addon to te4.org", action="publish"}
 		if core.steam then list[#list+1] = {name="Publish Addon to Steam Workshop", action="publish_steam"} end
+		if core.steam then list[#list+1] = {name="Update Addon's preview on Steam Workshop", action="publish_steam_preview"} end
 	end
 
 	local chars = {}
