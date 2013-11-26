@@ -350,7 +350,6 @@ function _M:generateList()
 		list[#list+1] = {name="Register new Addon", action="create"}
 		list[#list+1] = {name="Publish Addon to te4.org", action="publish"}
 		if core.steam then list[#list+1] = {name="Publish Addon to Steam Workshop", action="publish_steam"} end
-		if core.steam then list[#list+1] = {name="Update Addon's preview on Steam Workshop", action="publish_steam_preview"} end
 	end
 
 	local chars = {}
