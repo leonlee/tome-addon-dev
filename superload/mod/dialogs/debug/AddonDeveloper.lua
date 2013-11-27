@@ -329,6 +329,7 @@ function _M:use(item)
 	end end) end
 
 	if act == "publish_steam" then Dialog:listPopup("Choose an addon to publish to Steam Workshop (needs to have been published to te4.org first)", "", self:listAddons(function(add) return not add.teaa end), 400, 500, function(item) if item then
+		fs.mkdir("/user-generated-addons/")
 		if not fs.exists("/user-generated-addons/"..item.add.for_module.."-"..item.add.short_name.."-custom.png") then
 			Dialog:yesnoLongPopup("Addon preview", ([[Addons on Steam Workshop need a "preview" image for the listing.
 The game has generated a default one, however it is best if you make a custom one and place it in the folder #LIGHT_GREEN#%s#LAST# named #LIGHT_BLUE#%s#LAST#
