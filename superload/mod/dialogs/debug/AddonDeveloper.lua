@@ -267,7 +267,7 @@ function _M:publishAddonSteam(add)
 			if error then Dialog:simplePopup("Steam Workshop: "..add.long_name, "There was an error uploading the addon.")
 			elseif needaccept then
 				Dialog:yesnoLongPopup("Steam Workshop: "..add.long_name, "Addon succesfully uploaded to the Workshop.\nYou need to accept Steam Workshop Agreement in your Steam Client before the addon is visible to the community.", 500, function(ret) if ret then
-					util.browserOpenUrl(needaccept)
+					util.browserOpenUrl("http://steamcommunity.com/sharedfiles/workshoplegalagreement")
 				end end, "Go to Workshop", "Later")
 			else Dialog:simplePopup("Steam Workshop: "..add.long_name, "Addon succesfully uploaded to the Workshop.")
 			end
