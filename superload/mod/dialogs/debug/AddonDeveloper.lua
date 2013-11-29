@@ -275,7 +275,7 @@ function _M:publishAddonSteam(add)
 	else
 		core.steam.publishFileUpdate(pubid, file:sub(2), false, function(error)
 			popup:done()
-			if fs.exists("/user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png") then game:onTickEnd(function()
+			if fs.exists("/user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png") then game:registerTimer(0.01, function()
 				local popup = Dialog:simpleWaiter("Uploading addon preview to Steam Workshop", "Addon: "..add.short_name, nil, 10000)
 				core.steam.publishFileUpdate(pubid, "user-generated-addons/"..add.for_module.."-"..add.short_name.."-custom.png", true, function(error)
 					popup:done()
@@ -332,7 +332,7 @@ function _M:use(item)
 		fs.mkdir("/user-generated-addons/")
 		if not fs.exists("/user-generated-addons/"..item.add.for_module.."-"..item.add.short_name.."-custom.png") then
 			Dialog:yesnoLongPopup("Addon preview", ([[Addons on Steam Workshop need a "preview" image for the listing.
-The game has generated a default one, however it is best if you make a custom one and place it in the folder #LIGHT_GREEN#%s#LAST# named #LIGHT_BLUE#%s#LAST#
+The game has generated a default one, however it is best if you make a custom one and place it in the folder #LIGHT_GREEN#%s#LAST# named #LIGHT_BLUE#%s#LAST# (512x512 is a good size for it)
 You can still upload now and place it later.]]):format(fs.getRealPath("/user-generated-addons"), item.add.for_module.."-"..item.add.short_name.."-custom.png"), 600, function(ret)
 				self:publishAddonSteam(item.add)
 			end, "Upload now", "Wait")
