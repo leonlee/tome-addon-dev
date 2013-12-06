@@ -350,7 +350,7 @@ function _M:generateList()
 	if profile.auth then
 		list[#list+1] = {name="Register new Addon", action="create"}
 		list[#list+1] = {name="Publish Addon to te4.org", action="publish"}
-		if core.steam then list[#list+1] = {name="Publish Addon to Steam Workshop", action="publish_steam"} end
+		if core.steam and core.steam.connected() then list[#list+1] = {name="Publish Addon to Steam Workshop", action="publish_steam"} end
 	end
 
 	local chars = {}
