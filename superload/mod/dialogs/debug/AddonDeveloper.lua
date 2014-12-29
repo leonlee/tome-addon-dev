@@ -48,7 +48,7 @@ function _M:listAddons(filter)
 	for short_name, add in pairs(game.__mod_info.addons) do
 		if not filter or filter(add) then
 			list[#list+1] = {
-				name = add.long_name,
+				name = add.long_name.." ["..add.addon_version_txt.."]",
 				add = add,
 			}
 		end
@@ -169,6 +169,7 @@ function _M:publishAddon(add, release_name)
 			title = release_name,
 			md5 = fmd5,
 			version = add.version,
+			addon_version = add.addon_version,
 		},
 		file = file,
 	})
